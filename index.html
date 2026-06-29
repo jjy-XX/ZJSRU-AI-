@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>智慧校园 - 浙江树人学院</title>
     <link rel="stylesheet" href="css/style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r160/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/GLTFLoader.js"></script>
 </head>
 <body>
     <div id="loginPage" class="login-page">
@@ -408,86 +410,60 @@
             <section id="scene-digital-human" class="scene">
                 <div class="digital-human-container">
                     <div class="human-display">
+                        <canvas id="vrmCanvas"></canvas>
                         <div class="human-viewport">
-                            <div class="digital-human" id="digitalHuman">
-                                <div class="human-body">
-                                    <div class="human-head">
-                                        <div class="face">
-                                            <div class="hair"></div>
-                                            <div class="eyes">
-                                                <div class="eye left"><div class="pupil"></div></div>
-                                                <div class="eye right"><div class="pupil"></div></div>
-                                            </div>
-                                            <div class="eyebrows">
-                                                <div class="eyebrow left"></div>
-                                                <div class="eyebrow right"></div>
-                                            </div>
-                                            <div class="nose"></div>
-                                            <div class="mouth" id="mouth"></div>
-                                        </div>
-                                    </div>
-                                    <div class="human-torso">
-                                        <div class="neck"></div>
-                                        <div class="chest">
-                                            <div class="collar"></div>
-                                        </div>
-                                    </div>
-                                    <div class="human-arms">
-                                        <div class="arm left">
-                                            <div class="upper-arm"></div>
-                                            <div class="forearm"></div>
-                                            <div class="hand"></div>
-                                        </div>
-                                        <div class="arm right">
-                                            <div class="upper-arm"></div>
-                                            <div class="forearm"></div>
-                                            <div class="hand"></div>
-                                        </div>
-                                    </div>
-                                </div>
+                            <div class="canvas-loading" id="canvasLoading">
+                                <div class="loading-spinner"></div>
+                                <p>正在加载数字人模型...</p>
                             </div>
-                            <div class="human-shadow"></div>
-                        </div>
-                        <div class="human-status">
-                            <div class="status-indicator" id="statusIndicator">
-                                <span class="pulse"></span>
-                                <span id="statusText">待机中</span>
+                            <div class="canvas-warning" id="canvasWarning">
+                                ⚠️ 未检测到VRM模型，使用默认CSS人物
                             </div>
-                            <div class="mood-display">
-                                <span>心情：</span>
-                                <span id="moodEmoji">😊</span>
-                                <span id="moodText">友好</span>
+                            <div class="model-status" id="modelStatus">
+                                <span class="status-dot" id="statusDot"></span>
+                                <span>Ollama 连接中...</span>
                             </div>
                         </div>
                     </div>
                     <div class="human-chat">
                         <div class="human-chat-header">
-                            <h3>与数字人对话</h3>
-                            <div class="voice-toggle">
-                                <button id="voiceBtn" onclick="toggleVoice()" class="voice-btn on">🔊 语音开</button>
-                            </div>
+                            <h3>🤖 校园向导数字人</h3>
+                            <button class="clear-btn" onclick="clearChat()">🗑️ 清空历史</button>
                         </div>
                         <div class="human-messages" id="humanMessages">
                             <div class="human-msg bot">
                                 <div class="msg-bubble">
-                                    <p>你好！我是智慧校园的数字人助手小树人。很高兴见到你！我可以回答你的问题，陪你聊天，还能为你介绍校园哦~</p>
+                                    <p>你好！我是校园向导数字人。请问有什么关于教学楼、图书馆、选课、食堂、自习室或社团的问题吗？</p>
                                 </div>
                             </div>
                         </div>
                         <div class="human-input-area">
                             <div class="human-quick-replies">
-                                <button onclick="sendHumanMessage('你好，请介绍一下浙江树人学院')">介绍学校</button>
-                                <button onclick="sendHumanMessage('今天天气怎么样？')">天气查询</button>
-                                <button onclick="sendHumanMessage('给我讲个笑话吧')">讲个笑话</button>
+                                <button onclick="sendQuickMessage('图书馆在哪里？')">📍 图书馆位置</button>
+                                <button onclick="sendQuickMessage('食堂有什么好吃的？')">🍜 食堂美食</button>
+                                <button onclick="sendQuickMessage('如何选课？')">📚 选课指南</button>
+                                <button onclick="sendQuickMessage('有哪些社团？')">🎯 社团介绍</button>
                             </div>
                             <div class="human-input-row">
-                                <input type="text" id="humanInput" placeholder="和数字人说点什么..." onkeydown="handleHumanKeydown(event)">
-                                <button onclick="sendHumanMessageFromInput()" class="human-send-btn">发送</button>
+                                <input type="text" id="humanInput" placeholder="输入你的问题..." onkeydown="handleHumanKeydown(event)">
+                                <button onclick="sendMessage()" class="human-send-btn">发送</button>
                             </div>
                         </div>
                     </div>
                 </div>
             </section>
+            <div class="error-overlay" id="errorOverlay">
+                <div class="error-box">
+                    <div class="error-icon">⚠️</div>
+                    <h3>无法连接Ollama服务</h3>
+                    <p>请确保已在本地启动Ollama服务：<br>
+                       1. 安装Ollama：https://ollama.com/download<br>
+                       2. 运行命令：ollama run qwen2.5:7b<br>
+                       3. 服务默认端口：127.0.0.1:11434
+                    </p>
+                    <button class="retry-btn" onclick="checkOllama()">重试连接</button>
+                </div>
+            </div>
         </main>
 
         <footer class="main-footer">
@@ -500,6 +476,7 @@
     <script src="js/tour.js"></script>
     <script src="js/schedule.js"></script>
     <script src="js/booking.js"></script>
-    <script src="js/digital-human.js"></script>
+    <script src="js/digital-human-globals.js"></script>
+    <script type="module" src="js/digital-human.js"></script>
 </body>
 </html>
