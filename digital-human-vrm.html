@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智慧校园 - 3D数字人助手</title>
+    <script async src="https://unpkg.com/es-module-shims@1.6.3/dist/es-module-shims.js"></script>
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://esm.sh/three@0.160.0",
+            "@pixiv/three-vrm": "https://esm.sh/@pixiv/three-vrm@2.0.0"
+        }
+    }
+    </script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            overflow: hidden;
+        }
+        .container {
+            display: flex;
+            height: 100vh;
+            padding: 20px;
+            gap: 20px;
+        }
+        .canvas-wrapper {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            position: relative;
+            overflow: hidden;
+        }
+        #canvas {
+            width: 100%;
+            height: 100%;
+        }
+        .canvas-loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: #666;
+        }
+        .canvas-loading .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #4a90d9;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 12px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .canvas-warning {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(253, 203, 110, 0.9);
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-size: 13px;
+            color: #5d4037;
+            display: none;
+        }
+        .chat-panel {
+            width: 400px;
+            display: flex;
+            flex-direction: column;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        .chat-header {
+            padding: 20px;
+            background: linear-gradient(135deg, #4a90d9, #6c5ce7);
+            color: white;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .chat-header h2 {
+            font-size: 18px;
+            font-weight: 600;
+        }
+        .chat-header .clear-btn {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.3s;
+        }
+        .chat-header .clear-btn:hover {
+            background: rgba(255,255,255,0.3);
+        }
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        .message {
+            max-width: 85%;
+            animation: fadeIn 0.3s ease;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .message.bot {
+            align-self: flex-start;
+        }
+        .message.user {
+            align-self: flex-end;
+        }
+        .message-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            margin-bottom: 8px;
+        }
+        .message.bot .message-avatar {
+            background: linear-gradient(135deg, #4a90d9, #6c5ce7);
+            color: white;
+        }
+        .message.user .message-avatar {
+            background: linear-gradient(135deg, #00cec9, #00b894);
+            color: white;
+        }
+        .message-bubble {
+            padding: 12px 16px;
+            border-radius: 16px;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        .message.bot .message-bubble {
+            background: linear-gradient(135deg, rgba(74, 144, 217, 0.1), rgba(108, 92, 231, 0.1));
+            border: 1px solid rgba(74, 144, 217, 0.2);
+            border-bottom-left-radius: 4px;
+        }
+        .message.user .message-bubble {
+            background: linear-gradient(135deg, #4a90d9, #6c5ce7);
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+        .thinking-indicator {
+            display: flex;
+            gap: 4px;
+            padding: 8px 0;
+        }
+        .thinking-indicator span {
+            width: 8px;
+            height: 8px;
+            background: #4a90d9;
+            border-radius: 50%;
+            animation: thinking 1.4s infinite;
+        }
+        .thinking-indicator span:nth-child(2) { animation-delay: 0.2s; }
+        .thinking-indicator span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes thinking {
+            0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+            30% { transform: translateY(-6px); opacity: 1; }
+        }
+        .chat-input-area {
+            padding: 16px;
+            background: #f5f7fa;
+            border-top: 1px solid #e0e0e0;
+        }
+        .quick-replies {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+        .quick-replies button {
+            background: white;
+            border: 1px solid #d0d0d0;
+            padding: 6px 12px;
+            border-radius: 16px;
+            cursor: pointer;
+            font-size: 12px;
+            color: #666;
+            transition: all 0.3s;
+        }
+        .quick-replies button:hover {
+            background: #4a90d9;
+            color: white;
+            border-color: #4a90d9;
+        }
+        .input-row {
+            display: flex;
+            gap: 10px;
+        }
+        #chatInput {
+            flex: 1;
+            padding: 12px 16px;
+            border: 1px solid #d0d0d0;
+            border-radius: 24px;
+            font-size: 14px;
+            font-family: inherit;
+            outline: none;
+            transition: all 0.3s;
+        }
+        #chatInput:focus {
+            border-color: #4a90d9;
+            box-shadow: 0 0 0 3px rgba(74, 144, 217, 0.1);
+        }
+        .send-btn {
+            background: linear-gradient(135deg, #4a90d9, #6c5ce7);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 24px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s;
+        }
+        .send-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(74, 144, 217, 0.3);
+        }
+        .send-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .error-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.7);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .error-overlay.show {
+            display: flex;
+        }
+        .error-box {
+            background: white;
+            border-radius: 20px;
+            padding: 32px;
+            max-width: 400px;
+            text-align: center;
+            animation: slideUp 0.3s ease;
+        }
+        @keyframes slideUp {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        .error-box .error-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+        .error-box h3 {
+            font-size: 20px;
+            margin-bottom: 12px;
+            color: #333;
+        }
+        .error-box p {
+            font-size: 14px;
+            color: #666;
+            line-height: 1.6;
+            margin-bottom: 20px;
+        }
+        .error-box .retry-btn {
+            background: linear-gradient(135deg, #4a90d9, #6c5ce7);
+            color: white;
+            border: none;
+            padding: 12px 32px;
+            border-radius: 24px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        .model-status {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            background: rgba(0,0,0,0.5);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #00b894;
+            animation: pulse 2s infinite;
+        }
+        .status-dot.offline {
+            background: #e17055;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        @media (max-width: 768px) {
+            .container {
+                flex-direction: column;
+                padding: 10px;
+            }
+            .chat-panel {
+                width: 100%;
+                height: 50vh;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="canvas-wrapper">
+            <canvas id="canvas"></canvas>
+            <div class="canvas-loading" id="canvasLoading">
+                <div class="loading-spinner"></div>
+                <p>正在加载数字人模型...</p>
+            </div>
+            <div class="canvas-warning" id="canvasWarning">
+                ⚠️ 未检测到VRM模型，使用默认CSS人物
+            </div>
+            <div class="model-status" id="modelStatus">
+                <span class="status-dot" id="statusDot"></span>
+                <span>Ollama 连接中...</span>
+            </div>
+        </div>
+        <div class="chat-panel">
+            <div class="chat-header">
+                <h2>🤖 校园向导数字人</h2>
+                <button class="clear-btn" onclick="clearChat()">🗑️ 清空历史</button>
+            </div>
+            <div class="chat-messages" id="chatMessages">
+                <div class="message bot">
+                    <div class="message-avatar">🤖</div>
+                    <div class="message-bubble">
+                        <p>你好！我是校园向导数字人。请问有什么关于教学楼、图书馆、选课、食堂、自习室或社团的问题吗？</p>
+                    </div>
+                </div>
+            </div>
+            <div class="chat-input-area">
+                <div class="quick-replies">
+                    <button onclick="sendQuickMessage('图书馆在哪里？')">📍 图书馆位置</button>
+                    <button onclick="sendQuickMessage('食堂有什么好吃的？')">🍜 食堂美食</button>
+                    <button onclick="sendQuickMessage('如何选课？')">📚 选课指南</button>
+                    <button onclick="sendQuickMessage('有哪些社团？')">🎯 社团介绍</button>
+                </div>
+                <div class="input-row">
+                    <input type="text" id="chatInput" placeholder="输入你的问题..." onkeydown="handleKeydown(event)">
+                    <button class="send-btn" id="sendBtn" onclick="sendMessage()">发送</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="error-overlay" id="errorOverlay">
+        <div class="error-box">
+            <div class="error-icon">⚠️</div>
+            <h3>无法连接Ollama服务</h3>
+            <p>请确保已在本地启动Ollama服务：<br>
+               1. 安装Ollama：https://ollama.com/download<br>
+               2. 运行命令：ollama run qwen2.5:7b<br>
+               3. 服务默认端口：127.0.0.1:11434
+            </p>
+            <button class="retry-btn" onclick="checkOllama()">重试连接</button>
+        </div>
+    </div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { VRM, VRMUtils } from '@pixiv/three-vrm';
+
+        const OLLAMA_URL = 'http://127.0.0.1:11434/api/chat';
+        const MODEL_NAME = 'qwen2.5:7b';
+        
+        let scene, camera, renderer, vrm;
+        let isSpeaking = false;
+        let chatHistory = [];
+        let isOllamaConnected = false;
+        let animationId;
+        
+        const SYSTEM_PROMPT = `你是浙江树人学院的校园向导数字人，只回答以下校园相关问题：
+1. 教学楼（位置、开放时间、教室查询）
+2. 图书馆（位置、借阅规则、开放时间）
+3. 选课（选课流程、时间、课程查询）
+4. 食堂（位置、菜品、开放时间）
+5. 自习室（位置、预约方式、开放时间）
+6. 社团（社团列表、招新时间、活动）
+
+回答要求：
+- 精简回答，控制在2-3句话
+- 语气友好温和
+- 超出上述校园业务范围时，礼貌回绝并说明你只能回答校园相关问题`;
+
+        async function init() {
+            initThreeJS();
+            await checkOllama();
+            startIdleAnimation();
+        }
+
+        function initThreeJS() {
+            const canvas = document.getElementById('canvas');
+            
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xe0f4ff);
+            
+            camera = new THREE.PerspectiveCamera(45, canvas.clientWidth / canvas.clientHeight, 0.1, 1000);
+            camera.position.set(0, 1.2, 3);
+            
+            renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+            renderer.setSize(canvas.clientWidth, canvas.clientHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.shadowMap.enabled = true;
+            
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(5, 10, 7);
+            directionalLight.castShadow = true;
+            scene.add(directionalLight);
+            
+            const floorGeometry = new THREE.PlaneGeometry(10, 10);
+            const floorMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0xeeeeee,
+                roughness: 0.8
+            });
+            const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+            floor.rotation.x = -Math.PI / 2;
+            floor.position.y = 0;
+            floor.receiveShadow = true;
+            scene.add(floor);
+            
+            window.addEventListener('resize', onWindowResize);
+            
+            loadVRM();
+        }
+
+        async function loadVRM() {
+            const loading = document.getElementById('canvasLoading');
+            const warning = document.getElementById('canvasWarning');
+            
+            try {
+                const response = await fetch('avatar.vrm');
+                if (!response.ok) throw new Error('VRM file not found');
+                
+                const arrayBuffer = await response.arrayBuffer();
+                const vrmData = await VRMUtils.walkVrm(arrayBuffer);
+                
+                vrm = new VRM(vrmData);
+                await vrm.initialize();
+                
+                vrm.scene.rotation.y = Math.PI;
+                vrm.scene.position.y = 0;
+                vrm.scene.scale.set(1, 1, 1);
+                
+                vrm.scene.traverse((object) => {
+                    if (object.isMesh) {
+                        object.castShadow = true;
+                        object.receiveShadow = true;
+                    }
+                });
+                
+                scene.add(vrm.scene);
+                
+                loading.style.display = 'none';
+            } catch (error) {
+                console.warn('VRM load failed, using CSS fallback:', error);
+                loading.style.display = 'none';
+                warning.style.display = 'block';
+                createCSSCharacter();
+            }
+        }
+
+        function createCSSCharacter() {
+            const wrapper = document.querySelector('.canvas-wrapper');
+            const character = document.createElement('div');
+            character.style.cssText = `
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                width: 200px;
+                height: 320px;
+                animation: idleFloat 4s ease-in-out infinite;
+            `;
+            character.innerHTML = `
+                <style>
+                    @keyframes idleFloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
+                    @keyframes blink { 0%,45%,55%,100%{height:10px} 50%{height:2px} }
+                    @keyframes mouthMove { 0%,100%{height:12px} 50%{height:18px} }
+                    .css-head{position:relative;width:100px;height:110px;margin:0 auto;background:#ffe0bd;border-radius:50% 50% 45% 45%}
+                    .css-hair{position:absolute;top:-15px;left:-8px;right:-8px;height:60px;background:#4a3728;border-radius:50% 50% 30% 30%}
+                    .css-eyes{position:absolute;top:42px;left:50%;transform:translateX(-50%);display:flex;gap:24px}
+                    .css-eye{width:18px;height:18px;background:white;border-radius:50%;position:relative;overflow:hidden}
+                    .css-pupil{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:10px;height:10px;background:#2c3e50;border-radius:50%;animation:blink 4s infinite}
+                    .css-nose{position:absolute;top:58px;left:50%;transform:translateX(-50%);width:12px;height:16px;background:#f0c898;border-radius:50%}
+                    .css-mouth{position:absolute;bottom:20px;left:50%;transform:translateX(-50%);width:28px;height:12px;background:#e57373;border-radius:0 0 50% 50%}
+                    .css-body{width:120px;height:140px;margin:-5px auto;background:linear-gradient(135deg,#4a90d9,#6c5ce7);border-radius:20px 20px 10px 10px}
+                    .css-collar{width:36px;height:30px;background:white;margin:0 auto;clip-path:polygon(0 0,100% 0,80% 100%,20% 100%)}
+                    .css-speaking .css-mouth{animation:mouthMove 0.2s infinite}
+                    .css-speaking{animation:speakBounce 0.5s ease-in-out infinite}
+                    @keyframes speakBounce { 0%,100%{transform:translateY(0) scale(1)} 50%{transform:translateY(-4px) scale(1.02)} }
+                </style>
+                <div class="css-head">
+                    <div class="css-hair"></div>
+                    <div class="css-eyes"><div class="css-eye"><div class="css-pupil"></div></div><div class="css-eye"><div class="css-pupil"></div></div></div>
+                    <div class="css-nose"></div>
+                    <div class="css-mouth"></div>
+                </div>
+                <div class="css-body">
+                    <div class="css-collar"></div>
+                </div>
+            `;
+            character.id = 'cssCharacter';
+            wrapper.appendChild(character);
+        }
+
+        function onWindowResize() {
+            const canvas = document.getElementById('canvas');
+            camera.aspect = canvas.clientWidth / canvas.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(canvas.clientWidth, canvas.clientHeight);
+        }
+
+        function startIdleAnimation() {
+            let time = 0;
+            
+            function animate() {
+                animationId = requestAnimationFrame(animate);
+                time += 0.016;
+                
+                if (vrm) {
+                    const breathing = Math.sin(time * 2) * 0.005;
+                    vrm.scene.scale.setScalar(1 + breathing);
+                    
+                    if (!isSpeaking && Math.random() < 0.002) {
+                        triggerBlink();
+                    }
+                }
+                
+                renderer.render(scene, camera);
+            }
+            
+            animate();
+        }
+
+        function triggerBlink() {
+            if (!vrm) return;
+            
+            const blinkLeft = vrm.expressionManager?.getExpression('blinkLeft');
+            const blinkRight = vrm.expressionManager?.getExpression('blinkRight');
+            
+            if (blinkLeft) blinkLeft.setValue(1);
+            if (blinkRight) blinkRight.setValue(1);
+            
+            setTimeout(() => {
+                if (blinkLeft) blinkLeft.setValue(0);
+                if (blinkRight) blinkRight.setValue(0);
+            }, 150);
+        }
+
+        function startSpeaking() {
+            isSpeaking = true;
+            
+            const cssChar = document.getElementById('cssCharacter');
+            if (cssChar) {
+                cssChar.classList.add('css-speaking');
+            }
+            
+            if (vrm) {
+                const happy = vrm.expressionManager?.getExpression('happy');
+                if (happy) happy.setValue(0.4);
+                
+                startMouthAnimation();
+            }
+        }
+
+        function stopSpeaking() {
+            isSpeaking = false;
+            
+            const cssChar = document.getElementById('cssCharacter');
+            if (cssChar) {
+                cssChar.classList.remove('css-speaking');
+            }
+            
+            if (vrm) {
+                const happy = vrm.expressionManager?.getExpression('happy');
+                if (happy) happy.setValue(0);
+                
+                const aa = vrm.expressionManager?.getExpression('aa');
+                const oh = vrm.expressionManager?.getExpression('oh');
+                if (aa) aa.setValue(0);
+                if (oh) oh.setValue(0);
+            }
+        }
+
+        let mouthAnimId;
+        function startMouthAnimation() {
+            if (mouthAnimId) clearInterval(mouthAnimId);
+            
+            mouthAnimId = setInterval(() => {
+                if (!isSpeaking || !vrm) {
+                    clearInterval(mouthAnimId);
+                    return;
+                }
+                
+                const aa = vrm.expressionManager?.getExpression('aa');
+                const oh = vrm.expressionManager?.getExpression('oh');
+                
+                const value = 0.3 + Math.random() * 0.5;
+                
+                if (Math.random() > 0.5) {
+                    if (aa) aa.setValue(value);
+                    if (oh) oh.setValue(0);
+                } else {
+                    if (oh) oh.setValue(value);
+                    if (aa) aa.setValue(0);
+                }
+            }, 100);
+        }
+
+        async function checkOllama() {
+            const statusDot = document.getElementById('statusDot');
+            const statusText = document.querySelector('.model-status span:last-child');
+            const errorOverlay = document.getElementById('errorOverlay');
+            
+            try {
+                const response = await fetch('http://127.0.0.1:11434/api/tags', { method: 'GET' });
+                if (response.ok) {
+                    isOllamaConnected = true;
+                    statusDot.classList.remove('offline');
+                    statusText.textContent = 'Ollama 已连接';
+                    errorOverlay.classList.remove('show');
+                } else {
+                    throw new Error('Ollama not running');
+                }
+            } catch (error) {
+                isOllamaConnected = false;
+                statusDot.classList.add('offline');
+                statusText.textContent = 'Ollama 未连接';
+            }
+        }
+
+        function handleKeydown(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+
+        function sendQuickMessage(message) {
+            document.getElementById('chatInput').value = message;
+            sendMessage();
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('chatInput');
+            const message = input.value.trim();
+            
+            if (!message) return;
+            
+            input.value = '';
+            addMessage(message, 'user');
+            
+            if (!isOllamaConnected) {
+                showOllamaError();
+                return;
+            }
+            
+            const sendBtn = document.getElementById('sendBtn');
+            sendBtn.disabled = true;
+            
+            const thinkingId = showThinkingIndicator();
+            
+            startSpeaking();
+            
+            try {
+                const response = await fetch(OLLAMA_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        model: MODEL_NAME,
+                        messages: [
+                            { role: 'system', content: SYSTEM_PROMPT },
+                            ...chatHistory.slice(-6),
+                            { role: 'user', content: message }
+                        ],
+                        stream: true,
+                        options: {
+                            temperature: 0.7,
+                            max_tokens: 200
+                        }
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Ollama request failed');
+                }
+                
+                removeThinkingIndicator(thinkingId);
+                
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder('utf-8');
+                let fullResponse = '';
+                const messageId = addEmptyBotMessage();
+                
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n').filter(line => line.trim());
+                    
+                    for (const line of lines) {
+                        try {
+                            const data = JSON.parse(line);
+                            if (data.message && data.message.content) {
+                                fullResponse += data.message.content;
+                                updateBotMessage(messageId, fullResponse);
+                            }
+                            if (data.done) break;
+                        } catch (e) {
+                            console.warn('Parse error:', e);
+                        }
+                    }
+                }
+                
+                chatHistory.push({ role: 'user', content: message });
+                chatHistory.push({ role: 'assistant', content: fullResponse });
+                
+                stopSpeaking();
+            } catch (error) {
+                console.error('Chat error:', error);
+                removeThinkingIndicator(thinkingId);
+                addMessage('抱歉，我现在无法回答问题，请检查Ollama服务是否启动。', 'bot');
+                stopSpeaking();
+                isOllamaConnected = false;
+                document.getElementById('statusDot').classList.add('offline');
+                document.querySelector('.model-status span:last-child').textContent = 'Ollama 未连接';
+            } finally {
+                sendBtn.disabled = false;
+            }
+        }
+
+        function showOllamaError() {
+            document.getElementById('errorOverlay').classList.add('show');
+        }
+
+        function showThinkingIndicator() {
+            const messagesContainer = document.getElementById('chatMessages');
+            const thinkingDiv = document.createElement('div');
+            thinkingDiv.className = 'message bot';
+            thinkingDiv.innerHTML = `
+                <div class="message-avatar">🤖</div>
+                <div class="message-bubble">
+                    <div class="thinking-indicator">
+                        <span></span><span></span><span></span>
+                    </div>
+                </div>
+            `;
+            thinkingDiv.id = 'thinking-' + Date.now();
+            messagesContainer.appendChild(thinkingDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            return thinkingDiv.id;
+        }
+
+        function removeThinkingIndicator(id) {
+            const el = document.getElementById(id);
+            if (el) el.remove();
+        }
+
+        function addMessage(content, sender) {
+            const messagesContainer = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender}`;
+            
+            const avatar = sender === 'bot' ? '🤖' : '👤';
+            
+            messageDiv.innerHTML = `
+                <div class="message-avatar">${avatar}</div>
+                <div class="message-bubble">
+                    <p>${content}</p>
+                </div>
+            `;
+            
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        function addEmptyBotMessage() {
+            const messagesContainer = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message bot';
+            messageDiv.innerHTML = `
+                <div class="message-avatar">🤖</div>
+                <div class="message-bubble">
+                    <p id="botMsg-${Date.now()}"></p>
+                </div>
+            `;
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            return messageDiv.querySelector('p').id;
+        }
+
+        function updateBotMessage(id, content) {
+            const el = document.getElementById(id);
+            if (el) {
+                el.textContent = content;
+                const messagesContainer = document.getElementById('chatMessages');
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            }
+        }
+
+        function clearChat() {
+            chatHistory = [];
+            const messagesContainer = document.getElementById('chatMessages');
+            messagesContainer.innerHTML = `
+                <div class="message bot">
+                    <div class="message-avatar">🤖</div>
+                    <div class="message-bubble">
+                        <p>你好！我是校园向导数字人。请问有什么关于教学楼、图书馆、选课、食堂、自习室或社团的问题吗？</p>
+                    </div>
+                </div>
+            `;
+        }
+
+        init();
+    </script>
+</body>
+</html>
+<!-- 
+使用说明：
+1. 安装Ollama：https://ollama.com/download
+2. 拉取模型：ollama pull qwen2.5:7b
+3. 启动服务：ollama run qwen2.5:7b
+4. 将VRM模型文件命名为 avatar.vrm 放在同一目录下
+5. 启动本地服务器：python -m http.server 8080
+6. 打开浏览器访问：http://localhost:8080/digital-human-vrm.html
+
+跨域说明：
+- Ollama默认允许跨域访问（Access-Control-Allow-Origin: *）
+- 直接使用 file:// 协议打开HTML会被浏览器阻止fetch请求
+- 必须使用本地HTTP服务器（如python -m http.server）
+
+VRM模型获取：
+- 可以从 VRoid Hub 下载免费模型：https://hub.vroid.com/
+- 或使用其他VRM格式的虚拟人模型
+- 如果没有VRM模型，页面会自动使用CSS绘制的默认人物
+-->
